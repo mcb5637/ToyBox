@@ -163,7 +163,7 @@ namespace ToyBox.classes.Infrastructure {
             selectedSpellbook.RemoveSpellsOfLevel(level);
         }
 
-        public static int GetActualSpellsLearnedForClass(UnitDescriptor unit, Spellbook spellbook, int level) {
+        public static int GetActualSpellsLearnedForClass(UnitDescriptor unit, Spellbook spellbook, int level, UnitDescriptor baseUnit = null) {
             Mod.Trace($"GetActualSpellsLearnedForClass - unit: {unit?.CharacterName} spellbook: {spellbook?.Blueprint.DisplayName} level:{level}");
             // Get all +spells known facts for this spellbook's class so we can ignore them when getting spell counts
             var spellsToIgnore = unit.Facts.List.SelectMany(x =>
@@ -171,9 +171,8 @@ namespace ToyBox.classes.Infrastructure {
                 .Where(x => x.CharacterClass == spellbook.Blueprint.CharacterClass && (x.Archetype == null || unit.Progression.IsArchetype(x.Archetype))).Select(y => y.Spell)
                 .ToList();
             Spellbook spellbookOfNormalUnit = null;
-            if (unit.TryGetPartyMemberForLevelUpVersion(out var ch)) { // get the real units spellbook, the levelup version does not contain flags like CopiedFromScroll
-                if (ch?.Spellbooks?.Count() > 0)
-                    spellbookOfNormalUnit = ch.Spellbooks.First(s => s.Blueprint == spellbook.Blueprint);
+            if (baseUnit != null) { // get the real units spellbook, the levelup version does not contain flags like CopiedFromScroll
+                spellbookOfNormalUnit = baseUnit.Spellbooks?.FirstOrDefault(s => s.Blueprint == spellbook.Blueprint);
             }
             return GetActualSpellsLearned(spellbook, level, spellsToIgnore, spellbookOfNormalUnit);
         }
@@ -194,18 +193,20 @@ namespace ToyBox.classes.Infrastructure {
             Func<AbilityData, bool> normalSpellbookCondition = x => true;
             if (spellbookOfNormalUnit != null) {
                 var normalSpellsOfLevel = spellbookOfNormalUnit.SureKnownSpells(level);
-                normalSpellbookCondition = x => {
-                    var sp = normalSpellsOfLevel.First(a => a.Blueprint == x.Blueprint);
-                    if (sp == null)
-                        return true;
-                    return !sp.IsTemporary
-                        && !sp.CopiedFromScroll
-                        && !sp.IsFromMythicSpellList
-                        && sp.SourceItem == null
-                        && sp.SourceItemEquipmentBlueprint == null
-                        && sp.SourceItemUsableBlueprint == null
-                        && !sp.IsMysticTheurgeCombinedSpell;
-                };
+                if (normalSpellsOfLevel != null) {
+                    normalSpellbookCondition = x => {
+                        var sp = normalSpellsOfLevel.FirstOrDefault(a => a.Blueprint == x.Blueprint);
+                        if (sp == null)
+                            return true;
+                        return !sp.IsTemporary
+                            && !sp.CopiedFromScroll
+                            && !sp.IsFromMythicSpellList
+                            && sp.SourceItem == null
+                            && sp.SourceItemEquipmentBlueprint == null
+                            && sp.SourceItemUsableBlueprint == null
+                            && !sp.IsMysticTheurgeCombinedSpell;
+                    };
+                }
             }
             var known = spellbook.SureKnownSpells(level)
                 .Where(x => !x.IsTemporary
